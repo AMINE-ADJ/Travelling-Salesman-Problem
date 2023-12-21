@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Travelling Salesman Problem (TSP)</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #f0f0f0;
+    }
+
+    .graph-container {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.graph {
+  width: 48vw;
+  height: 60vh;
+  border: 1px solid #ccc;
+}
+
+
+    #buttons-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    button {
+      margin: 5px;
+      padding: 10px;
+      cursor: pointer;
+    }
+
+    #result {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css">
+</head>
+<body>
+<h1>Travelling Salesman Problem (TSP)</h1>
+
+<div id="add-edge-container">
+  <input type="number" id="edgeValueInput" placeholder="Edge Value">
+  <button onclick="addEdge()">Add Edge</button>
+</div>
+
+<div class="graph-container">
+  <div class="column">
+    <p>Exact Method : branch n bound O(n!) </p>
+    <div id="result1"></div>
+    <div id="cost1"></div>
+    <div id="time1"></div>
+    <div class="graph" id="graph-container"></div>
+  </div>
+
+  <div class="column">
+    <p>Heuristic Method : Nearest-Neighbohr O(n^2) </p>
+    <div id="result2"></div>
+    <div id="cost2"></div>
+    <div id="time2"></div>
+    <div class="graph" id="duplicated-graph-container"></div>
+  </div>
+</div>
+
+<div id="buttons-container">
+  <button onclick="duplicateGraph()"> >>>> </button>
+  <button onclick="findBestPath()">Find best Path</button>
+  <button onclick="deleteGraph()">Delete Graph</button>
+  
+  
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
+
+<script>
+  var nodes = new vis.DataSet([
+    { id: 1, label: "1" },
+    { id: 2, label: "2" },
+    { id: 3, label: "3" },
+  ]);
+
+  var edges = new vis.DataSet([
+    { from: 1, to: 2,  label:"10"},
+    { from: 1, to: 3 , label:"20"},
+    { from: 2, to: 3 , label:"30"}
+  ]);
+
+  var nodesHeuristic = new vis.DataSet([]);
+
+  var edgesHeuristic = new vis.DataSet([]);
+
+  
+  var container = document.getElementById("graph-container");
+  var data = { nodes: nodes, edges: edges };
+  var nbrNodes = 0;
+  var options = {
+    interaction: { hover: true },
+    manipulation: { enabled: true
+    },   
+    edges: {
+    color : {
+      inherit: false
+    }
+  },
+   physics: {
+    enabled: false,
+    // solver: 'forceAtlas2Based',
+    // stabilization: {
+    //   iterations: 1000, // Number of iterations before stabilizing
+    //   fit: true // Whether to fit the network after stabilization
+    // }
+  }
+  };
+
+  
+  function deleteNodeEdges(node)
+    {
+    	for(var i = 0; i < adj[node].length; i++)
+    	{
+    		var index = adj[adj[node][i]].findIndex(n => n == node);
+    		adj[adj[node][i]].splice(index, 1);
+    	}
+    }
+    function deleteEdges(from, to)
+    {
+    		var index = adj[from].findIndex(n => n == to);
+    		adj[from].splice(index, 1);
+    		index = adj[to].findIndex(n => n == from);
+    		adj[to].splice(index, 1);
+    }
+  var network = new vis.Network(container, data, options);
+
+  var nodesHeuristic = copyNodes(nodes);
+  var edgesHeuristic = copyEdges(edges);
+
+  var duplicatedContainer = document.getElementById("duplicated-graph-container");
+  var duplicatedData = { nodes: nodesHeuristic, edges: edgesHeuristic };
+  var duplicatedNetwork = new vis.Network(duplicatedContainer, duplicatedData, options);
+
+
+  function copyNodes(originalNodes) {
+  return new vis.DataSet(vis.util.deepExtend([], originalNodes.get()));
+}
+
+function copyEdges(originalEdges) {
+  return new vis.DataSet(vis.util.deepExtend([], originalEdges.get()));
+}
+
+function transformToAdjacencyMatrix(receivedNodes, receivedEdges) {
+
+
+  if (isCustomArray(receivedNodes) || isCustomArray(receivedEdges)) {
+
+
+var regularNodes = transformNodes(receivedNodes);
+const existingNode = nodes.get(receivedNodes[0]);
+regularNodes.forEach(node => {
+ 
+if (existingNode[node.id - 1]) {
+    existingNode[node.id - 1].label = String(node.id);
+}
+});
+nodes.update(existingNode);
+
+
+ regularNodes = transformNodes(receivedNodes);
+ var regularEdges = transformEdges(receivedEdges);
+
+}
+
+  const numNodes = regularNodes.length;
+  const adjMatrix = Array.from({ length: numNodes }, () => Array(numNodes).fill(0));
+
+  regularEdges.forEach((edge) => {
+    const from = edge.from - 1; 
+    const to = edge.to - 1; 
+    const weight = parseInt(edge.label); 
+    adjMatrix[from][to] = weight;
+    adjMatrix[to][from] = weight;
+  });
+
+  return adjMatrix;
+}
+function findBestPathBranchBound(adj) {
+  const N = adj.length;
+
+  let final_path = Array(N + 1).fill(-1);
+  let visited = Array(N).fill(false);
+  let final_res = Number.MAX_SAFE_INTEGER;
+
+  function copyToFinal(curr_path) {
+    for (let i = 0; i < N; i++) {
+      final_path[i] = curr_path[i];
+    }
+    final_path[N] = curr_path[0];
+  }
+
+  function firstMin(i) {
+    let min = Number.MAX_SAFE_INTEGER;
+    for (let k = 0; k < N; k++) {
+      if (adj[i][k] < min && i !== k) {
+        min = adj[i][k];
+      }
+    }
+    return min;
+  }
+
+  function secondMin(i) {
+    let first = Number.MAX_SAFE_INTEGER;
+    let second = Number.MAX_SAFE_INTEGER;
+    for (let j = 0; j < N; j++) {
+      if (i == j) {
+        continue;
+      }
+      if (adj[i][j] <= first) {
+        second = first;
+        first = adj[i][j];
+      } else if (adj[i][j] <= second && adj[i][j] !== first) {
+        second = adj[i][j];
+      }
+    }
+    return second;
+  }
+
+  function TSPRec(curr_bound, curr_weight, level, curr_path) {
+    if (level == N) {
+      if (adj[curr_path[level - 1]][curr_path[0]] !== 0) {
+        let curr_res =
+          curr_weight + adj[curr_path[level - 1]][curr_path[0]];
+
+        if (curr_res < final_res) {
+          copyToFinal(curr_path);
+          final_res = curr_res;
+        }
+      }
+      return;
+    }
+
+    for (let i = 0; i < N; i++) {
+      if (adj[curr_path[level - 1]][i] !== 0 && !visited[i]) {
+        let temp = curr_bound;
+        curr_weight += adj[curr_path[level - 1]][i];
+
+        if (level === 1) {
+          curr_bound -=
+            (firstMin(curr_path[level - 1]) +
+              firstMin(i)) /
+            2;
+        } else {
+          curr_bound -=
+            (secondMin(curr_path[level - 1]) +
+              firstMin(i)) /
+            2;
+        }
+
+        if (curr_bound + curr_weight < final_res) {
+          curr_path[level] = i;
+          visited[i] = true;
+          TSPRec(
+            curr_bound,
+            curr_weight,
+            level + 1,
+            curr_path
+          );
+        }
+
+        curr_weight -= adj[curr_path[level - 1]][i];
+        curr_bound = temp;
+        visited.fill(false);
+        for (let j = 0; j <= level - 1; j++)
+          visited[curr_path[j]] = true;
+      }
+    }
+  }
+
+  function TSP() {
+    let curr_path = Array(N + 1).fill(-1);
+    let curr_bound = 0;
+
+    visited.fill(false);
+
+    for (let i = 0; i < N; i++) {
+      curr_bound += firstMin(i) + secondMin(i);
+    }
+
+    curr_bound = curr_bound === 1 ? (curr_bound / 2) + 1 : curr_bound / 2;
+
+    visited[0] = true;
+    curr_path[0] = 0;
+
+    TSPRec(curr_bound, 0, 1, curr_path);
+  }
+
+  TSP();
+  return { final_res, final_path };
+}
+
+function printFinalPath(finalPath) {
+  const cityPath = finalPath.map((city) => `City ${city + 1}`).join(' > ');
+  return `${cityPath}`;
+}
+
+
+
+function solveTSPNearest(receivedNodes, receivedEdges) {
+  const numCities = receivedNodes.length;
+  const visited = new Array(numCities).fill(false);
+  const tour = [];
+  let totalDistance = 0;
+
+  let currentCity = 0;
+  tour.push(currentCity);
+  visited[currentCity] = true;
+
+  while (tour.length < numCities) {
+    let nearestCity = null;
+    let nearestDistance = Number.MAX_SAFE_INTEGER;
+
+    for (let city = 0; city < numCities; city++) {
+      if (!visited[city]) {
+        const distance = getEdgeLabel(currentCity + 1, city + 1, receivedEdges); 
+        if (distance < nearestDistance) {
+          nearestCity = city;
+          nearestDistance = distance;
+        }
+      }
+    }
+    currentCity = nearestCity;
+    tour.push(currentCity);
+    visited[currentCity] = true;
+    totalDistance += nearestDistance;
+  }
+
+  tour.push(0);
+  totalDistance += getEdgeLabel(currentCity + 1, 1, receivedEdges); 
+
+  return { tour, totalDistance };
+}
+
+function getEdgeLabel(from, to, receivedEdges) {
+  const edge = receivedEdges.find(e => (e.from === from && e.to === to) || (e.from === to && e.to === from));
+  return edge ? parseFloat(edge.label) : 0;
+}
+
+
+  function findBestPath() {
+
+    const startTime = performance.now();
+
+    const adjMatrix = transformToAdjacencyMatrix(nodes.get(), edges.get());
+    let result = findBestPathBranchBound(adjMatrix);
+
+  const endTime = performance.now();
+  const executionTime = endTime - startTime;
+    var Cost = document.getElementById("cost1");
+    Cost.innerText = `Minimum Cost : ${result.final_res}`;
+    var time = document.getElementById("time1");
+    time.innerText = `Execution time : ${executionTime} milliseconds`;
+    var NodesPath = result.final_path.map(node => node + 1);
+    var finalPathText = document.getElementById("result1");
+    finalPathText.innerText = `Final Path: ${printFinalPath(result.final_path)}`;
+
+    var regularEdges = transformEdges(edges.get());
+    var regularNodes = transformNodes(nodes.get());
+    
+    var ExactPathEdges = convertNodesPathToEdges(NodesPath, regularEdges);
+    coloPathEdgesExact(ExactPathEdges);
+
+    
+
+
+
+
+
+
+
+    var receviedNodesHeuristic = nodesHeuristic.get();
+    var receviedEdgesHeuristic = edgesHeuristic.get();
+    var regularNodesHeuristic = transformNodes(receviedNodesHeuristic);
+    var regularEdgesHeuristic = transformEdges(receviedEdgesHeuristic);
+
+
+    const startTime2 = performance.now();
+    const result2 = solveTSPNearest(regularNodesHeuristic, regularEdgesHeuristic);
+    const endTime2 = performance.now();
+    const executionTime2 = endTime2 - startTime2;
+    var Cost2 = document.getElementById("cost2");
+    Cost2.innerText = `Minimum Cost : ${result2.totalDistance}`;
+    var time2 = document.getElementById("time2");
+    time2.innerText = `Execution time : ${executionTime2} milliseconds`;
+    var NodesPathHeur = result2.tour.map(node => node + 1)
+    var finalPathText = document.getElementById("result2");
+    
+    finalPathText.innerText = `Final Path: ${printFinalPath(result2.tour)}`;
+
+    var HeuristicPathEdges = convertNodesPathToEdges(NodesPathHeur, regularEdgesHeuristic);
+    coloPathEdgesHeuristic(HeuristicPathEdges);
+
+  }
+
+  function convertNodesPathToEdges(nodesPath, edges) {
+    const edgeIds = [];
+    for (let i = 0; i < nodesPath.length - 1; i++) {
+        const from = nodesPath[i];
+        const to = nodesPath[i + 1];
+
+        const edge = edges.find(e => (e.from === from && e.to === to) || (e.from === to && e.to === from));
+
+        if (edge) {
+            edgeIds.push(edge.id);
+        } else {
+            console.error(`Edge not found between nodes ${from} and ${to}`);
+        }
+    }
+    return edgeIds;
+}
+
+
+  function restartGraph() {
+    nodes.clear();
+    nodesHeuristic.clear();
+    edgesHeuristic.clear();
+    edges.clear();
+    network.destroy();
+    duplicatedNetwork.destroy();
+    initGraph();
+    document.getElementById("result").innerText = "";
+    // uncolorAllNodes();
+  }
+  function duplicateGraph() {
+    nodesHeuristic = copyNodes(nodes);
+    edgesHeuristic = copyEdges(edges);
+    duplicatedContainer = document.getElementById("duplicated-graph-container");
+   duplicatedData = { nodes: nodesHeuristic, edges: edgesHeuristic };
+   duplicatedNetwork = new vis.Network(duplicatedContainer, duplicatedData, options);
+
+
+  }
+  function deleteGraph() {
+    nodes.clear();
+    nodesHeuristic.clear();
+    edgesHeuristic.clear();
+    edges.clear();
+    // network.destroy();
+    // duplicatedNetwork.destroy();
+    // network.destroy();
+    document.getElementById("result").innerText = "";
+    uncolorAllNodes();
+  }
+
+  function initGraph() {
+    nodes.add([
+      { id: 1, label: "1" },
+      { id: 2, label: "2" },
+      { id: 3, label: "3" },
+      { id: 4, label: "4" }
+    ]);
+
+    edges.add([
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 }
+    ]);
+
+    network = new vis.Network(container, data, options);
+
+    nodesHeuristic.add([
+      { id: 1, label: "1" },
+      { id: 2, label: "2" },
+      { id: 3, label: "3" },
+      { id: 4, label: "4" }
+    ]);
+
+    edgesHeuristic.add([
+      { from: 1, to: 2 },
+      { from: 2, to: 3 },
+      { from: 3, to: 4 }
+    ]);
+
+    duplicatedNetwork = new vis.Network(duplicatedContainer, duplicatedData, options);
+
+
+  }
+
+  function colorArticulationPoints(articulationPoints) {
+    articulationPoints.forEach(nodeId => {
+      colorNode(nodeId);
+    });
+  }
+  function coloPathEdgesHeuristic(PathEdges) {
+    PathEdges.forEach(EdgeId => {
+      colorEdgeHeuristic(EdgeId);
+    });
+  }
+  function coloPathEdgesExact(PathEdges) {
+    PathEdges.forEach(EdgeId => {
+      colorEdgeExact(EdgeId);
+    });
+  }
+
+  
+    function uncolorAllNodes() {
+    for (var i = 0; i < nodes.length; i++) {
+      uncolorNode(nodes.getIds()[i]);
+    }
+  }
+
+  function colorNode(nodeId) {
+    var receivedNodes = nodes.get();
+    var objectR = nodes.get(receivedNodes[0]);
+    var nodeToBeColored = objectR[nodeId - 1];
+    nodeToBeColored.color = {
+      border: '#ffe000',
+      background: '#fff000',
+      highlight: {
+        border: '#ffe000',
+        background: '#ffff00'
+      },
+      hover: {
+        border: '#ffe000',
+        background: '#ffff00'
+      }
+    }
+    nodes.update(objectR);
+  }
+
+  function colorEdgeHeuristic(EdgeId) {
+    var receivedEdges = edgesHeuristic.get();
+
+    var objectR = edgesHeuristic.get(receivedEdges[0]);
+    var EdgeToBeColored = objectR[EdgeId]; 
+    
+    EdgeToBeColored.color = {
+      color: '#18B76C',
+      hover: '#18B76C',
+      highlight: '#18B76C'
+    }
+
+    edgesHeuristic.update(objectR);
+  }
+
+  function colorEdgeExact(EdgeId) {
+    var receivedEdges = edges.get();
+
+    var objectR = edges.get(receivedEdges[0]);
+
+    var EdgeToBeColored = objectR[EdgeId]; 
+    
+    EdgeToBeColored.color = {
+      color: '#ff0000',
+      hover: '#ff0000',
+      highlight: '#ff0000'
+    }
+
+    edges.update(objectR);
+  }
+
+
+  function addEdge() {
+
+    var edgeValueInput = document.getElementById('edgeValueInput');
+    var edgeValue = edgeValueInput.value;
+
+    var receivedEdges = edges.get();
+    var EdgeId = edges.length;
+    var objectR = edges.get(receivedEdges[0]);
+    var edgeToBeUpdated = objectR[EdgeId - 1];
+
+    edgeToBeUpdated.label = edgeValue;
+    edges.update(objectR);
+    var receivedNodes = nodes.get();
+    var receivedEdges = edges.get();
+
+    if (isCustomArray(receivedNodes) || isCustomArray(receivedEdges)) {
+
+
+    var regularNodes = transformNodes(receivedNodes);
+    const existingNode = nodes.get(receivedNodes[0]);
+    regularNodes.forEach(node => {
+    
+    if (existingNode[node.id - 1]) {
+        existingNode[node.id - 1].label = String(node.id);
+    }
+    });
+    nodes.update(existingNode);
+
+
+    regularNodes = transformNodes(receivedNodes);
+    var regularEdges = transformEdges(receivedEdges);
+
+    }
+
+  }
+
+
+
+  function uncolorNode(nodeId) {
+    var nodeToBeUncolored = nodes.get(nodeId);
+
+    nodeToBeUncolored.color = {
+      border: '#2B7CE9',
+      background: '#97C2FC',
+      highlight: {
+        border: '#2B7CE9',
+        background: '#D2E5FF'
+      },
+      hover: {
+        border: '#2B7CE9',
+        background: '#D2E5FF'
+      }
+    }
+    nodes.update(nodeToBeUncolored);
+  }
+
+  function dfs(adj, V, vis, i, curr) {
+    vis[curr] = 1;
+    for (let x of adj[curr]) {
+      if (x !== i) {
+        if (!vis[x]) {
+          dfs(adj, V, vis, i, x);
+        }
+      }
+    }
+  }
+
+  
+function transformNodes(customNodes) {
+  return customNodes.map((customNode, index) => ({
+    id: index + 1, 
+    label: (index + 1).toString(), 
+    x: customNode.x,
+    y: customNode.y
+  }));
+}
+
+function transformEdges(customEdges) {
+  return customEdges.map((customEdge, index) => ({
+    from: getNodeID(customEdge.from),
+    to: getNodeID(customEdge.to),
+    id: index,
+    label: customEdge.label
+  }));
+}
+
+function getNodeID(customNodeID) {
+  var receivedNodes =  Array.from(nodes.get());
+  return receivedNodes.findIndex(node => node.id === customNodeID) + 1;
+}
+
+function isCustomArray(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) {
+    return false;
+  }
+
+  const sampleElement = arr[0];
+
+  if (typeof sampleElement !== 'object' || sampleElement === null) {
+    return false;
+  }
+
+  if ('id' in sampleElement && 'x' in sampleElement && 'y' in sampleElement) {
+    return true;
+  }
+
+  if ('from' in sampleElement && 'to' in sampleElement && 'id' in sampleElement) {
+    return true;
+  }
+
+  return false;
+}
+
+</script>
+    
+</body>
+</html>
+
